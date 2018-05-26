@@ -81,6 +81,13 @@ def process_squads(squad, githubConf):
         pulls = github_response.json()
 
         for pull in pulls:
+            for labels in pull['labels']:
+                if 'do-not-merge' in labels.values():
+                    pulls.remove(pull)
+                    logger.info('Removing PR ({}) from old list since has a \
+                                 do-not-merge label'.format(pull['_links']['issue']['href']))
+
+        for pull in pulls:
             created_at = dateutil.parser.parse(pull['created_at']).date()
             date_delta = today - created_at
             if date_delta.days >= limit_days:
