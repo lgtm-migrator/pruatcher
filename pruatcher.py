@@ -12,6 +12,8 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 test_env = os.environ.get('test_env')
 
+whitelist_pr_label_list = [label.strip() for label in os.environ['WHITELIST_PR_LABEL'].split(',')]
+
 if test_env:
     logging.basicConfig(stream=sys.stdout)
     logger.info('Running Pruatcher local as a developer. Enjoy')
@@ -45,6 +47,15 @@ def set_config_file():
     bucket.download_file(configuration_s3_file, '/tmp/pruatcher.json')
 
     return '/tmp/pruatcher.json'
+
+def valid_pull(pull):
+    for label in pull['labels']:
+      if label.get('name') in whitelist_pr_label_list:
+          logger.info('Removing PR ({}) from old list since has a \
+                       do-not-merge label'.format(pull['_links']['issue']['href']))
+          return False
+
+    return True
 
 def process_squads(squad, githubConf):
     logger.info('processing squad {}'.format(squad))
@@ -80,14 +91,10 @@ def process_squads(squad, githubConf):
 
         pulls = github_response.json()
 
-        for pull in pulls:
-            for labels in pull['labels']:
-                if 'do-not-merge' in labels.values():
-                    pulls.remove(pull)
-                    logger.info('Removing PR ({}) from old list since has a \
-                                 do-not-merge label'.format(pull['_links']['issue']['href']))
+        ## Filtering only valid PRs
+        valid_pulls = [pull for pull in pulls if valid_pull(pull)]
 
-        for pull in pulls:
+        for pull in valid_pulls:
             created_at = dateutil.parser.parse(pull['created_at']).date()
             date_delta = today - created_at
             if date_delta.days >= limit_days:
